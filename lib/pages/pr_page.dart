@@ -23,7 +23,7 @@ class _PrPageState extends State<PrPage> {
     final pat = auth.pat;
     final organisation = auth.organisation;
     final userId = auth.userId;
-    final projects = auth.selectedProjects;
+    final project = auth.selectedProject;
     final repositories = auth.selectedRepositories;
 
     if (pat.isEmpty) {
@@ -38,9 +38,9 @@ class _PrPageState extends State<PrPage> {
       );
       return;
     }
-    if (projects.isEmpty || repositories.isEmpty) {
+    if (project.isEmpty || repositories.isEmpty) {
       SnackBarService.show(
-        'Select at least one project and repository in Settings.',
+        'Select a project and at least one repository in Settings.',
       );
       return;
     }
@@ -51,24 +51,18 @@ class _PrPageState extends State<PrPage> {
     });
 
     try {
-      print('Fetching PRs for projects: $projects, repos: $repositories');
       final credentials = base64Encode(utf8.encode(':$pat'));
       final requests = <Future<http.Response>>[];
-      for (final project in projects) {
-        for (final repo in repositories) {
-          print('Fetching PRs for project: $project, repo: $repo');
-          print(
-            'https://dev.azure.com/$organisation/$project/_apis/git/repositories/$repo/pullrequests?api-version=7.1&searchCriteria.creatorId=$userId',
-          );
-          requests.add(
-            http.get(
-              Uri.parse(
-                'https://dev.azure.com/$organisation/$project/_apis/git/repositories/$repo/pullrequests?api-version=7.1&searchCriteria.creatorId=$userId',
-              ),
-              headers: {'Authorization': 'Basic $credentials'},
+      for (final repo in repositories) {
+        print('Fetching PRs for project: $project, repo: $repo');
+        requests.add(
+          http.get(
+            Uri.parse(
+              'https://dev.azure.com/$organisation/$project/_apis/git/repositories/$repo/pullrequests?api-version=7.1&searchCriteria.creatorId=$userId',
             ),
-          );
-        }
+            headers: {'Authorization': 'Basic $credentials'},
+          ),
+        );
       }
 
       final responses = await Future.wait(requests);

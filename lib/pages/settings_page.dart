@@ -22,6 +22,7 @@ class _SettingsPageState extends State<SettingsPage> {
   bool _obscurePat = true;
   bool _generating = false;
   bool _loadingProjects = false;
+  List<Project> _projects = [];
   bool _loadingRepos = false;
 
   @override
@@ -105,90 +106,32 @@ class _SettingsPageState extends State<SettingsPage> {
 
     setState(() => _loadingProjects = true);
 
-    List<Project> projects = [];
     try {
       final credentials = base64Encode(utf8.encode(':$pat'));
-      final uri = Uri.parse(
-        'https://dev.azure.com/$organisation/_apis/projects?api-version=7.1',
-      );
       final response = await http.get(
-        uri,
+        Uri.parse(
+          'https://dev.azure.com/$organisation/_apis/projects?api-version=7.1',
+        ),
         headers: {'Authorization': 'Basic $credentials'},
       );
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body) as Map<String, dynamic>;
-        projects =
+        final loaded =
             (data['value'] as List<dynamic>)
                 .map((e) => Project.fromJson(e as Map<String, dynamic>))
                 .toList()
               ..sort((a, b) => a.name.compareTo(b.name));
+        if (mounted) setState(() => _projects = loaded);
       } else {
         SnackBarService.show(
           'Error ${response.statusCode}: ${response.reasonPhrase}',
         );
-        return;
       }
     } catch (e) {
       SnackBarService.show('Request failed: $e');
-      return;
     } finally {
       if (mounted) setState(() => _loadingProjects = false);
-    }
-
-    if (!mounted) return;
-
-    final current = Set<String>.from(auth.selectedProjects);
-    final selected = Set<String>.from(current);
-
-    await showDialog<void>(
-      context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return AlertDialog(
-              title: const Text('Select Projects'),
-              content: SizedBox(
-                width: double.maxFinite,
-                child: ListView(
-                  shrinkWrap: true,
-                  children: projects.map((project) {
-                    return CheckboxListTile(
-                      value: selected.contains(project.name),
-                      title: Text(project.name),
-                      onChanged: (checked) {
-                        setDialogState(() {
-                          if (checked == true) {
-                            selected.add(project.name);
-                          } else {
-                            selected.remove(project.name);
-                          }
-                        });
-                      },
-                    );
-                  }).toList(),
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('Cancel'),
-                ),
-                FilledButton(
-                  onPressed: () => Navigator.pop(context, true),
-                  child: const Text('Save'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-
-    if (selected.toSet().difference(current).isNotEmpty ||
-        current.difference(selected).isNotEmpty) {
-      await auth.setSelectedProjects(selected.toList());
-      if (mounted) setState(() {});
     }
   }
 
@@ -196,7 +139,7 @@ class _SettingsPageState extends State<SettingsPage> {
     final auth = context.read<AuthState>();
     final pat = auth.pat;
     final organisation = auth.organisation;
-    final projects = auth.selectedProjects;
+    final project = auth.selectedProject;
 
     if (pat.isEmpty || organisation.isEmpty) {
       SnackBarService.show(
@@ -204,10 +147,8 @@ class _SettingsPageState extends State<SettingsPage> {
       );
       return;
     }
-    if (projects.isEmpty) {
-      SnackBarService.show(
-        'Select at least one project before loading repositories.',
-      );
+    if (project.isEmpty) {
+      SnackBarService.show('Select a project before loading repositories.');
       return;
     }
 
@@ -216,31 +157,25 @@ class _SettingsPageState extends State<SettingsPage> {
     List<Repository> repos = [];
     try {
       final credentials = base64Encode(utf8.encode(':$pat'));
-      final responses = await Future.wait(
-        projects.map(
-          (project) => http.get(
-            Uri.parse(
-              'https://dev.azure.com/$organisation/$project/_apis/git/repositories?api-version=7.1',
-            ),
-            headers: {'Authorization': 'Basic $credentials'},
-          ),
+      final response = await http.get(
+        Uri.parse(
+          'https://dev.azure.com/$organisation/$project/_apis/git/repositories?api-version=7.1',
         ),
+        headers: {'Authorization': 'Basic $credentials'},
       );
 
-      for (final response in responses) {
-        if (response.statusCode == 200) {
-          final data = jsonDecode(response.body) as Map<String, dynamic>;
-          repos.addAll(
-            (data['value'] as List<dynamic>).map(
-              (e) => Repository.fromJson(e as Map<String, dynamic>),
-            ),
-          );
-        } else {
-          SnackBarService.show(
-            'Error ${response.statusCode}: ${response.reasonPhrase}',
-          );
-          return;
-        }
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        repos.addAll(
+          (data['value'] as List<dynamic>).map(
+            (e) => Repository.fromJson(e as Map<String, dynamic>),
+          ),
+        );
+      } else {
+        SnackBarService.show(
+          'Error ${response.statusCode}: ${response.reasonPhrase}',
+        );
+        return;
       }
       repos.sort((a, b) => a.name.compareTo(b.name));
     } catch (e) {
@@ -310,7 +245,7 @@ class _SettingsPageState extends State<SettingsPage> {
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthState>();
-    final selectedProjects = auth.selectedProjects;
+    final selectedProject = auth.selectedProject;
     final selectedRepositories = auth.selectedRepositories;
 
     return Scaffold(
@@ -370,43 +305,43 @@ class _SettingsPageState extends State<SettingsPage> {
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 12),
-            InkWell(
-              onTap: _loadingProjects ? null : _selectProjects,
-              borderRadius: BorderRadius.circular(4),
-              child: InputDecorator(
-                decoration: InputDecoration(
-                  border: const OutlineInputBorder(),
-                  suffixIcon: _loadingProjects
-                      ? const Padding(
-                          padding: EdgeInsets.all(12),
-                          child: SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2),
+            Row(
+              children: [
+                Expanded(
+                  child: DropdownButtonFormField<String>(
+                    value: selectedProject.isEmpty ? null : selectedProject,
+                    hint: const Text('Select a project'),
+                    decoration: const InputDecoration(
+                      border: OutlineInputBorder(),
+                    ),
+                    items: _projects
+                        .map(
+                          (p) => DropdownMenuItem(
+                            value: p.name,
+                            child: Text(p.name),
                           ),
                         )
-                      : const Icon(Icons.arrow_drop_down),
+                        .toList(),
+                    onChanged: (value) {
+                      if (value != null) {
+                        context.read<AuthState>().setSelectedProject(value);
+                      }
+                    },
+                  ),
                 ),
-                child: selectedProjects.isEmpty
-                    ? const Text(
-                        'Tap to select projects',
-                        style: TextStyle(color: Colors.black38),
-                      )
-                    : Wrap(
-                        spacing: 6,
-                        runSpacing: 4,
-                        children: selectedProjects
-                            .map(
-                              (name) => Chip(
-                                label: Text(name),
-                                materialTapTargetSize:
-                                    MaterialTapTargetSize.shrinkWrap,
-                                padding: EdgeInsets.zero,
-                              ),
-                            )
-                            .toList(),
-                      ),
-              ),
+                const SizedBox(width: 8),
+                IconButton.outlined(
+                  onPressed: _loadingProjects ? null : _selectProjects,
+                  tooltip: 'Load projects',
+                  icon: _loadingProjects
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.refresh),
+                ),
+              ],
             ),
             const SizedBox(height: 24),
             const Text(
