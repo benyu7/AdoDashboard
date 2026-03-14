@@ -17,6 +17,7 @@ class SettingsPage extends StatefulWidget {
 class _SettingsPageState extends State<SettingsPage> {
   late final TextEditingController _patController;
   late final TextEditingController _orgController;
+  late final FocusNode _orgFocusNode;
   late final TextEditingController _emailController;
   late final TextEditingController _userIdController;
   bool _obscurePat = true;
@@ -30,6 +31,13 @@ class _SettingsPageState extends State<SettingsPage> {
     final auth = context.read<AuthState>();
     _patController = TextEditingController(text: auth.pat);
     _orgController = TextEditingController(text: auth.organisation);
+    _orgFocusNode = FocusNode()
+      ..addListener(() {
+        if (!_orgFocusNode.hasFocus) {
+          context.read<AuthState>().setOrganisation(_orgController.text);
+          _loadProjects();
+        }
+      });
     _emailController = TextEditingController(text: auth.email);
     _userIdController = TextEditingController(text: auth.userId);
     _loadProjects();
@@ -39,6 +47,7 @@ class _SettingsPageState extends State<SettingsPage> {
   void dispose() {
     _patController.dispose();
     _orgController.dispose();
+    _orgFocusNode.dispose();
     _emailController.dispose();
     _userIdController.dispose();
     super.dispose();
@@ -288,10 +297,7 @@ class _SettingsPageState extends State<SettingsPage> {
             const SizedBox(height: 12),
             TextField(
               controller: _orgController,
-              onChanged: (value) {
-                context.read<AuthState>().setOrganisation(value);
-                _loadProjects();
-              },
+              focusNode: _orgFocusNode,
               decoration: const InputDecoration(
                 hintText: 'Enter your Azure DevOps organisation',
                 border: OutlineInputBorder(),
