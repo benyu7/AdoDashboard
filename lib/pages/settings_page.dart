@@ -21,7 +21,6 @@ class _SettingsPageState extends State<SettingsPage> {
   late final TextEditingController _userIdController;
   bool _obscurePat = true;
   bool _generating = false;
-  bool _loadingProjects = false;
   List<Project> _projects = [];
   bool _loadingRepos = false;
 
@@ -33,6 +32,7 @@ class _SettingsPageState extends State<SettingsPage> {
     _orgController = TextEditingController(text: auth.organisation);
     _emailController = TextEditingController(text: auth.email);
     _userIdController = TextEditingController(text: auth.userId);
+    _loadProjects();
   }
 
   @override
@@ -92,7 +92,7 @@ class _SettingsPageState extends State<SettingsPage> {
     }
   }
 
-  Future<void> _selectProjects() async {
+  Future<void> _loadProjects() async {
     final auth = context.read<AuthState>();
     final pat = auth.pat;
     final organisation = auth.organisation;
@@ -103,8 +103,6 @@ class _SettingsPageState extends State<SettingsPage> {
       );
       return;
     }
-
-    setState(() => _loadingProjects = true);
 
     try {
       final credentials = base64Encode(utf8.encode(':$pat'));
@@ -130,8 +128,6 @@ class _SettingsPageState extends State<SettingsPage> {
       }
     } catch (e) {
       SnackBarService.show('Request failed: $e');
-    } finally {
-      if (mounted) setState(() => _loadingProjects = false);
     }
   }
 
@@ -292,8 +288,10 @@ class _SettingsPageState extends State<SettingsPage> {
             const SizedBox(height: 12),
             TextField(
               controller: _orgController,
-              onChanged: (value) =>
-                  context.read<AuthState>().setOrganisation(value),
+              onChanged: (value) {
+                context.read<AuthState>().setOrganisation(value);
+                _loadProjects();
+              },
               decoration: const InputDecoration(
                 hintText: 'Enter your Azure DevOps organisation',
                 border: OutlineInputBorder(),
@@ -305,43 +303,20 @@ class _SettingsPageState extends State<SettingsPage> {
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: DropdownButtonFormField<String>(
-                    value: selectedProject.isEmpty ? null : selectedProject,
-                    hint: const Text('Select a project'),
-                    decoration: const InputDecoration(
-                      border: OutlineInputBorder(),
-                    ),
-                    items: _projects
-                        .map(
-                          (p) => DropdownMenuItem(
-                            value: p.name,
-                            child: Text(p.name),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: (value) {
-                      if (value != null) {
-                        context.read<AuthState>().setSelectedProject(value);
-                      }
-                    },
-                  ),
-                ),
-                const SizedBox(width: 8),
-                IconButton.outlined(
-                  onPressed: _loadingProjects ? null : _selectProjects,
-                  tooltip: 'Load projects',
-                  icon: _loadingProjects
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.refresh),
-                ),
-              ],
+            DropdownButtonFormField<String>(
+              initialValue: selectedProject.isEmpty ? null : selectedProject,
+              hint: const Text('Select a project'),
+              decoration: const InputDecoration(border: OutlineInputBorder()),
+              items: _projects
+                  .map(
+                    (p) => DropdownMenuItem(value: p.name, child: Text(p.name)),
+                  )
+                  .toList(),
+              onChanged: (value) {
+                if (value != null) {
+                  context.read<AuthState>().setSelectedProject(value);
+                }
+              },
             ),
             const SizedBox(height: 24),
             const Text(
