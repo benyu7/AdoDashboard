@@ -1,16 +1,27 @@
-# ado_dashboard
+# ADO Dashboard
 
-A new Flutter project.
+A Flutter app for monitoring Azure DevOps activity — view PR status and track running pipelines at a glance.
+
+## Features
+
+- **PR Status** — browse and monitor pull requests across your Azure DevOps repositories
+- **Running Pipelines** — track active pipeline runs and their current status in real time
 
 ## Getting Started
 
-This project is a starting point for a Flutter application.
+### Prerequisites
 
-A few resources to get you started if this is your first Flutter project:
+- [Flutter SDK](https://docs.flutter.dev/get-started/install)
+- An Azure DevOps organization and a Personal Access Token (PAT) with appropriate permissions
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+### Running the App
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+```bash
+flutter pub get
+flutter run
+```
+
+## Resources
+
+- [Flutter Documentation](https://docs.flutter.dev/)
+- [Azure DevOps REST API](https://learn.microsoft.com/en-us/rest/api/azure/devops/)
