@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
 import '../models/pull_request.dart';
 import '../services/auth_state.dart';
+import '../services/snack_bar_service.dart';
 import '../widgets/pr_list_tile.dart';
 
 class PrPage extends StatefulWidget {
@@ -18,12 +19,13 @@ class _PrPageState extends State<PrPage> {
   List<PullRequest> _pullRequests = [];
 
   Future<void> _listPullRequests() async {
-    final pat = context.read<AuthState>().pat;
+    final auth = context.read<AuthState>();
+    final pat = auth.pat;
+    final organisation = auth.organisation;
+    final userId = auth.userId;
     if (pat.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please enter a PAT in Settings before listing PRs.'),
-        ),
+      SnackBarService.show(
+        'Please enter a PAT in Settings before listing PRs.',
       );
       return;
     }
@@ -36,7 +38,7 @@ class _PrPageState extends State<PrPage> {
     try {
       final credentials = base64Encode(utf8.encode(':$pat'));
       final uri = Uri.parse(
-        'https://dev.azure.com/flintfox/FFA/_apis/git/repositories/FFA-Agreements/pullrequests?api-version=7.1',
+        'https://dev.azure.com/$organisation/FFA/_apis/git/repositories/FFA-Agreements/pullrequests?api-version=7.1&searchCriteria.creatorId=$userId',
       );
       final response = await http.get(
         uri,
@@ -50,20 +52,12 @@ class _PrPageState extends State<PrPage> {
             .toList();
         setState(() => _pullRequests = items);
       } else {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Error ${response.statusCode}: ${response.reasonPhrase}'),
-            ),
-          );
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Request failed: $e')),
+        SnackBarService.show(
+          'Error ${response.statusCode}: ${response.reasonPhrase}',
         );
       }
+    } catch (e) {
+      SnackBarService.show('Request failed: $e');
     } finally {
       setState(() => _loading = false);
     }

@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'pages/pr_page.dart';
 import 'pages/settings_page.dart';
 import 'services/auth_state.dart';
+import 'services/snack_bar_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -23,6 +24,7 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'ADO Dashboard',
+      scaffoldMessengerKey: SnackBarService.messengerKey,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.blueGrey),
       ),

@@ -1,23 +1,42 @@
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'secure_storage_service.dart';
 
 const _patKey = 'ado_pat';
 const _emailKey = 'ado_email';
+const _orgKey = 'ado_org';
+const _userIdKey = 'ado_user_id';
+const _projectsKey = 'ado_projects';
 
 class AuthState extends ChangeNotifier {
   String _pat = '';
   String _email = '';
+  String _organisation = '';
+  String _userId = '';
+  List<String> _selectedProjects = [];
 
   String get pat => _pat;
   String get email => _email;
+  String get organisation => _organisation;
+  String get userId => _userId;
+  List<String> get selectedProjects => List.unmodifiable(_selectedProjects);
 
   Future<void> load() async {
     final results = await Future.wait([
       SecureStorageService.read(_patKey),
       SecureStorageService.read(_emailKey),
+      SecureStorageService.read(_orgKey),
+      SecureStorageService.read(_userIdKey),
+      SecureStorageService.read(_projectsKey),
     ]);
     _pat = results[0] ?? '';
     _email = results[1] ?? '';
+    _organisation = results[2] ?? '';
+    _userId = results[3] ?? '';
+    final projectsJson = results[4];
+    _selectedProjects = projectsJson != null
+        ? List<String>.from(jsonDecode(projectsJson) as List)
+        : [];
     notifyListeners();
   }
 
@@ -43,5 +62,35 @@ class AuthState extends ChangeNotifier {
     _email = '';
     notifyListeners();
     await SecureStorageService.delete(_emailKey);
+  }
+
+  Future<void> setOrganisation(String value) async {
+    _organisation = value;
+    notifyListeners();
+    await SecureStorageService.write(_orgKey, value);
+  }
+
+  Future<void> clearOrganisation() async {
+    _organisation = '';
+    notifyListeners();
+    await SecureStorageService.delete(_orgKey);
+  }
+
+  Future<void> setUserId(String value) async {
+    _userId = value;
+    notifyListeners();
+    await SecureStorageService.write(_userIdKey, value);
+  }
+
+  Future<void> clearUserId() async {
+    _userId = '';
+    notifyListeners();
+    await SecureStorageService.delete(_userIdKey);
+  }
+
+  Future<void> setSelectedProjects(List<String> projects) async {
+    _selectedProjects = List.of(projects);
+    notifyListeners();
+    await SecureStorageService.write(_projectsKey, jsonEncode(projects));
   }
 }
