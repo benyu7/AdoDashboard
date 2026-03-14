@@ -11,18 +11,21 @@ class SettingsPage extends StatefulWidget {
 
 class _SettingsPageState extends State<SettingsPage> {
   late final TextEditingController _patController;
+  late final TextEditingController _emailController;
   bool _obscurePat = true;
 
   @override
   void initState() {
     super.initState();
-    final pat = context.read<AuthState>().pat;
-    _patController = TextEditingController(text: pat);
+    final auth = context.read<AuthState>();
+    _patController = TextEditingController(text: auth.pat);
+    _emailController = TextEditingController(text: auth.email);
   }
 
   @override
   void dispose() {
     _patController.dispose();
+    _emailController.dispose();
     super.dispose();
   }
 
@@ -52,8 +55,7 @@ class _SettingsPageState extends State<SettingsPage> {
               controller: _patController,
               obscureText: _obscurePat,
               enableInteractiveSelection: true,
-              onChanged: (value) =>
-                  context.read<AuthState>().setPat(value),
+              onChanged: (value) => context.read<AuthState>().setPat(value),
               decoration: InputDecoration(
                 hintText: 'Enter your Azure DevOps PAT',
                 border: const OutlineInputBorder(),
@@ -61,9 +63,23 @@ class _SettingsPageState extends State<SettingsPage> {
                   icon: Icon(
                     _obscurePat ? Icons.visibility_off : Icons.visibility,
                   ),
-                  onPressed: () =>
-                      setState(() => _obscurePat = !_obscurePat),
+                  onPressed: () => setState(() => _obscurePat = !_obscurePat),
                 ),
+              ),
+            ),
+            const SizedBox(height: 24),
+            const Text(
+              'Email',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _emailController,
+              keyboardType: TextInputType.emailAddress,
+              onChanged: (value) => context.read<AuthState>().setEmail(value),
+              decoration: const InputDecoration(
+                hintText: 'Enter your email address',
+                border: OutlineInputBorder(),
               ),
             ),
           ],
