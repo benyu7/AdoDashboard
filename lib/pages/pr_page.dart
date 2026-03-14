@@ -23,9 +23,24 @@ class _PrPageState extends State<PrPage> {
     final pat = auth.pat;
     final organisation = auth.organisation;
     final userId = auth.userId;
+    final projects = auth.selectedProjects;
+    final repositories = auth.selectedRepositories;
+
     if (pat.isEmpty) {
       SnackBarService.show(
         'Please enter a PAT in Settings before listing PRs.',
+      );
+      return;
+    }
+    if (userId.isEmpty) {
+      SnackBarService.show(
+        'Generate a User ID in Settings before listing PRs.',
+      );
+      return;
+    }
+    if (projects.isEmpty || repositories.isEmpty) {
+      SnackBarService.show(
+        'Select at least one project and repository in Settings.',
       );
       return;
     }
@@ -36,26 +51,47 @@ class _PrPageState extends State<PrPage> {
     });
 
     try {
+      print('Fetching PRs for projects: $projects, repos: $repositories');
       final credentials = base64Encode(utf8.encode(':$pat'));
-      final uri = Uri.parse(
-        'https://dev.azure.com/$organisation/FFA/_apis/git/repositories/FFA-Agreements/pullrequests?api-version=7.1&searchCriteria.creatorId=$userId',
-      );
-      final response = await http.get(
-        uri,
-        headers: {'Authorization': 'Basic $credentials'},
-      );
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body) as Map<String, dynamic>;
-        final items = (data['value'] as List<dynamic>)
-            .map((e) => PullRequest.fromJson(e as Map<String, dynamic>))
-            .toList();
-        setState(() => _pullRequests = items);
-      } else {
-        SnackBarService.show(
-          'Error ${response.statusCode}: ${response.reasonPhrase}',
-        );
+      final requests = <Future<http.Response>>[];
+      for (final project in projects) {
+        for (final repo in repositories) {
+          print('Fetching PRs for project: $project, repo: $repo');
+          print(
+            'https://dev.azure.com/$organisation/$project/_apis/git/repositories/$repo/pullrequests?api-version=7.1&searchCriteria.creatorId=$userId',
+          );
+          requests.add(
+            http.get(
+              Uri.parse(
+                'https://dev.azure.com/$organisation/$project/_apis/git/repositories/$repo/pullrequests?api-version=7.1&searchCriteria.creatorId=$userId',
+              ),
+              headers: {'Authorization': 'Basic $credentials'},
+            ),
+          );
+        }
       }
+
+      final responses = await Future.wait(requests);
+      final allPrs = <PullRequest>[];
+
+      for (final response in responses) {
+        if (response.statusCode == 200) {
+          final data = jsonDecode(response.body) as Map<String, dynamic>;
+          allPrs.addAll(
+            (data['value'] as List<dynamic>).map(
+              (e) => PullRequest.fromJson(e as Map<String, dynamic>),
+            ),
+          );
+        } else {
+          SnackBarService.show(
+            'Error ${response.statusCode}: ${response.reasonPhrase}',
+          );
+        }
+      }
+
+      allPrs.sort((a, b) => b.id.compareTo(a.id));
+      setState(() => _pullRequests = allPrs);
+      if (allPrs.isEmpty) SnackBarService.show('No pull requests found.');
     } catch (e) {
       SnackBarService.show('Request failed: $e');
     } finally {

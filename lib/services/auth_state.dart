@@ -7,6 +7,7 @@ const _emailKey = 'ado_email';
 const _orgKey = 'ado_org';
 const _userIdKey = 'ado_user_id';
 const _projectsKey = 'ado_projects';
+const _reposKey = 'ado_repositories';
 
 class AuthState extends ChangeNotifier {
   String _pat = '';
@@ -14,12 +15,14 @@ class AuthState extends ChangeNotifier {
   String _organisation = '';
   String _userId = '';
   List<String> _selectedProjects = [];
+  List<String> _selectedRepositories = [];
 
   String get pat => _pat;
   String get email => _email;
   String get organisation => _organisation;
   String get userId => _userId;
   List<String> get selectedProjects => List.unmodifiable(_selectedProjects);
+  List<String> get selectedRepositories => List.unmodifiable(_selectedRepositories);
 
   Future<void> load() async {
     final results = await Future.wait([
@@ -28,6 +31,7 @@ class AuthState extends ChangeNotifier {
       SecureStorageService.read(_orgKey),
       SecureStorageService.read(_userIdKey),
       SecureStorageService.read(_projectsKey),
+      SecureStorageService.read(_reposKey),
     ]);
     _pat = results[0] ?? '';
     _email = results[1] ?? '';
@@ -36,6 +40,10 @@ class AuthState extends ChangeNotifier {
     final projectsJson = results[4];
     _selectedProjects = projectsJson != null
         ? List<String>.from(jsonDecode(projectsJson) as List)
+        : [];
+    final reposJson = results[5];
+    _selectedRepositories = reposJson != null
+        ? List<String>.from(jsonDecode(reposJson) as List)
         : [];
     notifyListeners();
   }
@@ -92,5 +100,11 @@ class AuthState extends ChangeNotifier {
     _selectedProjects = List.of(projects);
     notifyListeners();
     await SecureStorageService.write(_projectsKey, jsonEncode(projects));
+  }
+
+  Future<void> setSelectedRepositories(List<String> repositories) async {
+    _selectedRepositories = List.of(repositories);
+    notifyListeners();
+    await SecureStorageService.write(_reposKey, jsonEncode(repositories));
   }
 }

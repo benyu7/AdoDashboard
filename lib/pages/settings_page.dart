@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
 import '../models/project.dart';
+import '../models/repository.dart';
 import '../services/auth_state.dart';
 import '../services/snack_bar_service.dart';
 
@@ -21,6 +22,7 @@ class _SettingsPageState extends State<SettingsPage> {
   bool _obscurePat = true;
   bool _generating = false;
   bool _loadingProjects = false;
+  bool _loadingRepos = false;
 
   @override
   void initState() {
@@ -57,7 +59,7 @@ class _SettingsPageState extends State<SettingsPage> {
     try {
       final credentials = base64Encode(utf8.encode(':$pat'));
       final uri = Uri.parse(
-        'https://vssps.dev.azure.com/$organisation/_apis/graph/users?api-version=7.1-preview.1',
+        'https://vssps.dev.azure.com/$organisation/_apis/identities?searchFilter=MailAddress&filterValue=$email&api-version=7.1',
       );
       final response = await http.get(
         uri,
@@ -66,20 +68,15 @@ class _SettingsPageState extends State<SettingsPage> {
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body) as Map<String, dynamic>;
-        final users = data['value'] as List<dynamic>;
-        final match = users.cast<Map<String, dynamic>>().firstWhere(
-          (u) =>
-              (u['principalName'] as String?)?.toLowerCase() ==
-              email.toLowerCase(),
-          orElse: () => {},
-        );
+        final identities = data['value'] as List<dynamic>;
 
-        if (match.isEmpty) {
+        if (identities.isEmpty) {
           SnackBarService.show('No user found with email "$email".');
         } else {
-          final originId = match['originId'] as String;
-          await auth.setUserId(originId);
-          if (mounted) _userIdController.text = originId;
+          final identity = identities.first as Map<String, dynamic>;
+          final id = identity['id'] as String;
+          await auth.setUserId(id);
+          if (mounted) _userIdController.text = id;
           SnackBarService.show('User ID generated successfully.');
         }
       } else {
@@ -195,9 +192,126 @@ class _SettingsPageState extends State<SettingsPage> {
     }
   }
 
+  Future<void> _selectRepositories() async {
+    final auth = context.read<AuthState>();
+    final pat = auth.pat;
+    final organisation = auth.organisation;
+    final projects = auth.selectedProjects;
+
+    if (pat.isEmpty || organisation.isEmpty) {
+      SnackBarService.show(
+        'PAT and organisation are required to load repositories.',
+      );
+      return;
+    }
+    if (projects.isEmpty) {
+      SnackBarService.show(
+        'Select at least one project before loading repositories.',
+      );
+      return;
+    }
+
+    setState(() => _loadingRepos = true);
+
+    List<Repository> repos = [];
+    try {
+      final credentials = base64Encode(utf8.encode(':$pat'));
+      final responses = await Future.wait(
+        projects.map(
+          (project) => http.get(
+            Uri.parse(
+              'https://dev.azure.com/$organisation/$project/_apis/git/repositories?api-version=7.1',
+            ),
+            headers: {'Authorization': 'Basic $credentials'},
+          ),
+        ),
+      );
+
+      for (final response in responses) {
+        if (response.statusCode == 200) {
+          final data = jsonDecode(response.body) as Map<String, dynamic>;
+          repos.addAll(
+            (data['value'] as List<dynamic>).map(
+              (e) => Repository.fromJson(e as Map<String, dynamic>),
+            ),
+          );
+        } else {
+          SnackBarService.show(
+            'Error ${response.statusCode}: ${response.reasonPhrase}',
+          );
+          return;
+        }
+      }
+      repos.sort((a, b) => a.name.compareTo(b.name));
+    } catch (e) {
+      SnackBarService.show('Request failed: $e');
+      return;
+    } finally {
+      if (mounted) setState(() => _loadingRepos = false);
+    }
+
+    if (!mounted) return;
+
+    final current = Set<String>.from(auth.selectedRepositories);
+    final selected = Set<String>.from(current);
+
+    await showDialog<void>(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Select Repositories'),
+              content: SizedBox(
+                width: double.maxFinite,
+                child: ListView(
+                  shrinkWrap: true,
+                  children: repos.map((repo) {
+                    return CheckboxListTile(
+                      value: selected.contains(repo.name),
+                      title: Text(repo.name),
+                      subtitle: Text(repo.project),
+                      onChanged: (checked) {
+                        setDialogState(() {
+                          if (checked == true) {
+                            selected.add(repo.name);
+                          } else {
+                            selected.remove(repo.name);
+                          }
+                        });
+                      },
+                    );
+                  }).toList(),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.pop(context, true),
+                  child: const Text('Save'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (selected.toSet().difference(current).isNotEmpty ||
+        current.difference(selected).isNotEmpty) {
+      await auth.setSelectedRepositories(selected.toList());
+      if (mounted) setState(() {});
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final selectedProjects = context.watch<AuthState>().selectedProjects;
+    final auth = context.watch<AuthState>();
+    final selectedProjects = auth.selectedProjects;
+    final selectedRepositories = auth.selectedRepositories;
 
     return Scaffold(
       appBar: AppBar(
@@ -282,6 +396,50 @@ class _SettingsPageState extends State<SettingsPage> {
                         spacing: 6,
                         runSpacing: 4,
                         children: selectedProjects
+                            .map(
+                              (name) => Chip(
+                                label: Text(name),
+                                materialTapTargetSize:
+                                    MaterialTapTargetSize.shrinkWrap,
+                                padding: EdgeInsets.zero,
+                              ),
+                            )
+                            .toList(),
+                      ),
+              ),
+            ),
+            const SizedBox(height: 24),
+            const Text(
+              'Repositories',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 12),
+            InkWell(
+              onTap: _loadingRepos ? null : _selectRepositories,
+              borderRadius: BorderRadius.circular(4),
+              child: InputDecorator(
+                decoration: InputDecoration(
+                  border: const OutlineInputBorder(),
+                  suffixIcon: _loadingRepos
+                      ? const Padding(
+                          padding: EdgeInsets.all(12),
+                          child: SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        )
+                      : const Icon(Icons.arrow_drop_down),
+                ),
+                child: selectedRepositories.isEmpty
+                    ? const Text(
+                        'Tap to select repositories',
+                        style: TextStyle(color: Colors.black38),
+                      )
+                    : Wrap(
+                        spacing: 6,
+                        runSpacing: 4,
+                        children: selectedRepositories
                             .map(
                               (name) => Chip(
                                 label: Text(name),
