@@ -93,6 +93,47 @@ class _PrPageState extends State<PrPage> {
     }
   }
 
+  Widget _buildGroupedList() {
+    final grouped = <String, List<PullRequest>>{};
+    for (final pr in _pullRequests) {
+      grouped.putIfAbsent(pr.repository, () => []).add(pr);
+    }
+    final repos = grouped.keys.toList()..sort();
+
+    return ListView.builder(
+      itemCount: repos.length,
+      itemBuilder: (context, repoIndex) {
+        final repo = repos[repoIndex];
+        final prs = grouped[repo]!;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (repoIndex > 0) const SizedBox(height: 16),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Text(
+                repo,
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            const Divider(height: 1),
+            ...prs.map(
+              (pr) => Column(
+                children: [
+                  PrListTile(pr: pr),
+                  const Divider(height: 1),
+                ],
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -129,14 +170,7 @@ class _PrPageState extends State<PrPage> {
                 style: const TextStyle(fontSize: 14, color: Colors.black54),
               ),
               const SizedBox(height: 8),
-              Expanded(
-                child: ListView.separated(
-                  itemCount: _pullRequests.length,
-                  separatorBuilder: (_, __) => const Divider(height: 1),
-                  itemBuilder: (context, index) =>
-                      PrListTile(pr: _pullRequests[index]),
-                ),
-              ),
+              Expanded(child: _buildGroupedList()),
             ],
           ],
         ),
